@@ -1,0 +1,15 @@
+name: CI
+
+# Tests im CPU-Image (run_tests.sh) mit nachgebautem Erkenner; das Image lädt dabei das Modell buffalo_l.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tests
+        run: bash run_tests.sh

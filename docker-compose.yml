@@ -1,0 +1,28 @@
+# Gesichtserkennung fuer die Tuerklingel (Home Assistant). Details: docs/technik.md
+#   docker compose --env-file ~/facerec/facerec.env up -d --build
+# AMD-GPU (ROCm/MIGraphX) zusaetzlich: -f docker-compose.yml -f docker-compose.rocm.yml
+services:
+  facerec:
+    build: .
+    image: facerec:local
+    container_name: facerec
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      HA_URL: ${HA_URL:-}
+      HA_TOKEN: ${HA_TOKEN:-}
+      FACEREC_TOKEN: ${FACEREC_TOKEN:-}
+      FACEREC_MATCH: ${FACEREC_MATCH:-0.32}
+      FACEREC_SUGGEST: ${FACEREC_SUGGEST:-0.28}
+      FACEREC_STREAM_URLS: ${FACEREC_STREAM_URLS:-}
+      FACEREC_PROVIDERS: ${FACEREC_PROVIDERS:-CPUExecutionProvider}
+    volumes:
+      # Personen, Gesichtsausschnitte, offene Standbilder (SQLite + JPEGs)
+      - ${FACEREC_DATA_DIR:-${HOME}/facerec}/data:/data
+    ports:
+      - "${FACEREC_BIND:-0.0.0.0}:${FACEREC_PORT:-8191}:8191"
+    # NPU (spaeter, mit Ryzen-AI-Paket im Image + FACEREC_PROVIDERS=VitisAIExecutionProvider,CPUExecutionProvider):
+    # devices:
+    #   - /dev/accel/accel0
+    # group_add:
+    #   - render

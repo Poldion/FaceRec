@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111214">
+<title>Gesichter</title>
+<style>
+  :root { --bg:#111214; --card:#1b1c20; --line:#2a2c31; --text:#e8e8ea; --muted:#9a9ca3; --acc:#d6b25e;
+          --bad:#e5786d; --ok:#7cc48a; --r:12px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:16px 16px 60px; }
+  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  h1 { font-size:20px; margin:0; }
+  .tabs { display:flex; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:4px; margin-bottom:14px; }
+  .tabs button { flex:1; background:none; border:0; color:var(--muted); padding:9px; border-radius:9px; font:inherit; cursor:pointer; }
+  .tabs button.on { background:#2a2c31; color:var(--text); font-weight:600; }
+  .badge[hidden] { display:none; }
+  .badge { display:inline-block; min-width:20px; padding:0 6px; margin-left:4px; border-radius:10px; background:var(--acc); color:#111; font-size:12px; font-weight:700; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:14px; margin-bottom:12px; }
+  .faces { display:flex; gap:8px; flex-wrap:wrap; }
+  .faces img { width:84px; height:84px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer; background:#000; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  input[type=text] { flex:1; min-width:140px; background:#111214; border:1px solid var(--line); color:var(--text); border-radius:9px; padding:9px 10px; font:inherit; }
+  button.b { background:#2a2c31; border:1px solid var(--line); color:var(--text); border-radius:9px; padding:9px 12px; font:inherit; cursor:pointer; }
+  button.b.pri { background:var(--acc); color:#111; border-color:var(--acc); font-weight:600; }
+  button.b.bad { color:var(--bad); }
+  button.b:disabled { opacity:.5; }
+  .muted { color:var(--muted); font-size:13px; }
+  .empty { color:var(--muted); padding:20px 4px; }
+  .pname { font-weight:600; font-size:16px; }
+  .ev { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .ev:last-child { border-bottom:0; }
+  .ev time { color:var(--muted); white-space:nowrap; font-size:13px; min-width:92px; }
+  .known { color:var(--ok); } .unk { color:var(--acc); }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#2a2c31; border:1px solid var(--line);
+           padding:10px 14px; border-radius:10px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90vw; }
+  #toast.show { opacity:1; } #toast.err { border-color:var(--bad); }
+  #lb { position:fixed; inset:0; background:rgba(0,0,0,.92); display:none; align-items:center; justify-content:center; z-index:9; padding:16px; }
+  #lb img { max-width:100%; max-height:100%; border-radius:8px; }
+  .result { margin-top:10px; }
+  .evfaces { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .evface { display:flex; align-items:center; gap:8px; background:#151619; border:1px solid var(--line); border-radius:10px; padding:4px 8px 4px 4px; }
+  .evface img { width:44px; height:44px; object-fit:cover; border-radius:8px; cursor:pointer; }
+  button.b.sm { padding:4px 9px; font-size:13px; }
+  dialog { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:16px; width:min(420px, calc(100vw - 32px)); }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Gesichter</h1><span class="muted" id="info"></span></header>
+  <div class="tabs">
+    <button data-tab="open" class="on">Offen<span class="badge" id="n-open" hidden></span></button>
+    <button data-tab="persons">Personen</button>
+    <button data-tab="events">Verlauf</button>
+    <button data-tab="test">Test</button>
+  </div>
+
+  <section id="t-open"></section>
+  <section id="t-persons" hidden>
+    <div class="card"><div class="row" style="margin:0">
+      <input type="text" id="new-name" placeholder="Neue Person (danach Fotos hinzufügen)">
+      <button class="b" id="new-btn">Anlegen</button>
+    </div></div>
+    <div id="persons"></div>
+  </section>
+  <section id="t-events" hidden><div class="card" id="events"></div></section>
+  <section id="t-test" hidden>
+    <div class="card">
+      <div class="muted">Bild hochladen und erkennen lassen, wie beim Klingeln. Unbekannte Gesichter landen unter „Offen“.</div>
+      <div class="row"><input type="file" id="test-file" accept="image/*"><button class="b pri" id="test-btn">Erkennen</button></div>
+      <div class="result" id="test-res"></div>
+    </div>
+  </section>
+  <p style="color:var(--muted, #888);font-size:12px;margin:24px 0 8px">Erkennungsmodell InsightFace buffalo_l –
+    nur für nicht-kommerzielle Nutzung freigegeben. Gesichtsdaten bleiben auf diesem Rechner.</p>
+</main>
+<datalist id="names"></datalist>
+<div id="toast"></div>
+<div id="lb"><img alt=""></div>
+<dialog id="dlg"><div id="dlg-body"></div></dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+let persons = [];
+
+function toast(msg, err) {
+  const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.className = '', 3000);
+}
+async function api(path, opt = {}) {
+  if (opt.json !== undefined) { opt.body = JSON.stringify(opt.json); opt.headers = {'Content-Type': 'application/json'}; }
+  const r = await fetch(path, opt);
+  if (r.status === 401) {
+    const tok = prompt('Zugangsschlüssel (FACEREC_TOKEN):');
+    if (tok) { document.cookie = 'facerec_token=' + encodeURIComponent(tok) + '; path=/; max-age=31536000; SameSite=Strict'; return api(path, opt); }
+    throw new Error('Anmeldung nötig');
+  }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || ('Fehler ' + r.status));
+  return j;
+}
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter(k => k != null)); return e; };
+const when = ts => new Date(ts * 1000).toLocaleString('de-DE', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+function img(src, big) { const i = el('img', {src, loading:'lazy', alt:''}); i.onclick = () => lightbox(big || src); return i; }
+function lightbox(src) { $('lb').querySelector('img').src = src; $('lb').style.display = 'flex'; }
+$('lb').onclick = () => $('lb').style.display = 'none';
+async function act(btn, fn) { btn.disabled = true; try { await fn(); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; } }
+
+// ---------------------------------------------------------------- Offen
+async function loadOpen() {
+  const groups = await api('/api/unknowns');
+  const n = groups.reduce((s, g) => s + 1, 0);
+  $('n-open').hidden = !n; $('n-open').textContent = n;
+  const box = $('t-open'); box.replaceChildren();
+  if (!groups.length) { box.append(el('div', {className:'empty', textContent:'Keine offenen Gesichter. Neue unbekannte Besucher erscheinen hier.'})); return; }
+  for (const g of groups) {
+    const first = g.faces[0];
+    const name = el('input', {type:'text', placeholder:'Name (vorhandene Person oder neu)'}); name.setAttribute('list', 'names');
+    const go = el('button', {className:'b pri', textContent:'Zuweisen'});
+    const assign = n => act(go, async () => {
+      const r = await api(`/api/unknowns/${first.id}/assign`, {method:'POST', json:{name:n}});
+      toast(`${r.assigned} Gesicht${r.assigned > 1 ? 'er' : ''} → ${r.name}${r.created ? ' (neu)' : ''}`); refresh();
+    });
+    go.onclick = () => name.value.trim() ? assign(name.value) : name.focus();
+    name.onkeydown = e => { if (e.key === 'Enter' && name.value.trim()) assign(name.value); };
+    const ign = el('button', {className:'b bad', textContent:'Verwerfen'});
+    ign.onclick = () => act(ign, async () => { await api(`/api/unknowns/${first.id}/ignore`, {method:'POST', json:{}}); refresh(); });
+    const sug = g.suggestion ? el('button', {className:'b', textContent:`Ist ${g.suggestion}`, title:`Ähnlichkeit ${Math.round(g.suggestion_score * 100)} %`}) : null;
+    if (sug) sug.onclick = () => assign(g.suggestion);
+    box.append(el('div', {className:'card'},
+      el('div', {className:'faces'}, ...g.faces.map(f => img(f.crop, f.snapshot || f.crop))),
+      el('div', {className:'muted', style:'margin-top:6px', textContent:
+        `${g.faces.length > 1 ? g.faces.length + ' Aufnahmen, vermutlich dieselbe Person · ' : ''}zuletzt ${when(first.created)} · Antippen zeigt das ganze Bild`}),
+      el('div', {className:'row'}, sug, name, go, ign)));
+  }
+}
+
+// ---------------------------------------------------------------- Personen
+async function loadPersons() {
+  persons = await api('/api/persons');
+  $('names').replaceChildren(...persons.map(p => el('option', {value:p.name})));
+  const box = $('persons'); box.replaceChildren();
+  if (!persons.length) { box.append(el('div', {className:'empty', textContent:'Noch keine Personen. Gesichter unter „Offen“ zuweisen oder oben eine Person anlegen.'})); return; }
+  for (const p of persons) {
+    const file = el('input', {type:'file', accept:'image/*', multiple:true, hidden:true});
+    const add = el('button', {className:'b', textContent:'Fotos hinzufügen'});
+    add.onclick = () => file.click();
+    file.onchange = () => act(add, async () => {
+      let ok = 0;
+      for (const f of file.files) {
+        const fd = new FormData(); fd.append('image', f);
+        try { await api(`/api/persons/${p.id}/photo`, {method:'POST', body:fd}); ok++; } catch (e) { toast(`${f.name}: ${e.message}`, true); }
+      }
+      if (ok) toast(`${ok} Foto${ok > 1 ? 's' : ''} hinzugefügt`); refresh();
+    });
+    const ren = el('button', {className:'b', textContent:'Umbenennen'});
+    ren.onclick = () => { const n = prompt('Neuer Name (vorhandener Name = zusammenlegen):', p.name); if (n && n.trim() && n !== p.name)
+      act(ren, async () => { const r = await api(`/api/persons/${p.id}`, {method:'PATCH', json:{name:n}}); toast(r.merged ? 'Zusammengelegt' : 'Umbenannt'); refresh(); }); };
+    const del = el('button', {className:'b bad', textContent:'Löschen'});
+    del.onclick = () => confirm(`${p.name} mit allen ${p.count} Gesichtern löschen?`) &&
+      act(del, async () => { await api(`/api/persons/${p.id}`, {method:'DELETE'}); refresh(); });
+    const faces = p.samples.map(s => {
+      const i = el('img', {src:s.crop, loading:'lazy', alt:'', title:'Antippen: verschieben oder entfernen'});
+      i.onclick = () => sampleMenu(s, p);
+      return i;
+    });
+    box.append(el('div', {className:'card'},
+      el('div', {className:'pname', textContent:p.name}, el('span', {className:'muted', textContent:` · ${p.count} Gesicht${p.count === 1 ? '' : 'er'}`})),
+      faces.length ? el('div', {className:'faces', style:'margin-top:10px'}, ...faces) : el('div', {className:'muted', textContent:'Noch keine Gesichter – Fotos hinzufügen.'}),
+      el('div', {className:'row'}, add, ren, del, file)));
+  }
+}
+async function sampleMenu(s, p) {
+  const n = prompt(`Dieses Gesicht gehört nicht zu ${p.name}?\nRichtigen Namen eintragen – oder leer lassen und OK, um es zu entfernen.`, '');
+  if (n === null) return;
+  try {
+    if (n.trim()) { await api(`/api/samples/${s.id}/move`, {method:'POST', json:{name:n}}); toast('Verschoben'); }
+    else { await api(`/api/samples/${s.id}`, {method:'DELETE'}); toast('Entfernt'); }
+    refresh();
+  } catch (e) { toast(e.message, true); }
+}
+$('new-btn').onclick = () => { const n = $('new-name').value.trim(); if (n) act($('new-btn'), async () => {
+  const r = await api('/api/persons', {method:'POST', json:{name:n}}); $('new-name').value = ''; toast(r.created ? 'Angelegt' : 'Gibt es schon'); refresh(); }); };
+
+// ---------------------------------------------------------------- Verlauf
+async function loadEvents() {
+  const evs = await api('/api/events?limit=100');
+  const box = $('events'); box.replaceChildren();
+  if (!evs.length) { box.append(el('div', {className:'empty', textContent:'Noch kein Klingeln.'})); return; }
+  for (const e of evs) {
+    const r = e.result || {};
+    // erkannte Gesichter: Ausschnitt + "Falsch?" (solange die Erkennung noch aufgehoben wird)
+    const faces = (r.faces || []).filter(f => f.known && (f.correctable || f.corrected)).map(f => el('div', {className:'evface'},
+      f.crop && f.correctable ? img(f.crop) : null,
+      el('span', {textContent: f.name + (f.corrected ? ' (korrigiert)' : '')}),
+      f.correctable ? Object.assign(el('button', {className:'b sm', textContent:'Falsch?'}), {onclick: () => correctDialog(f)}) : null));
+    box.append(el('div', {className:'ev'}, el('time', {textContent:when(e.created)}),
+      el('div', {style:'flex:1'}, el('span', {className: r.unknown_count ? 'unk' : 'known', textContent:e.text || '…'}),
+        e.source && e.source !== 'upload' ? el('div', {className:'muted', textContent:e.source}) : null,
+        faces.length ? el('div', {className:'evfaces'}, ...faces) : null)));
+  }
+}
+
+function correctDialog(f) {
+  const d = $('dlg'), body = $('dlg-body'); body.replaceChildren();
+  const name = el('input', {type:'text', placeholder:'Wer war es wirklich?'}); name.setAttribute('list', 'names');
+  const ok = el('button', {className:'b pri', textContent:'Richtig zuordnen'});
+  const unk = el('button', {className:'b', textContent:'Unbekannt', title:'Gesicht kommt nach „Offen“, nichts wird gelernt'});
+  const close = el('button', {className:'b', textContent:'Abbrechen', onclick: () => d.close()});
+  const send = n => act(ok, async () => {
+    const r = await api(`/api/recent/${f.recent_id}/correct`, {method:'POST', json:{name:n}});
+    toast(r.name ? `Korrigiert: ${r.name}${r.created ? ' (neu)' : ''}` : 'Als unbekannt nach „Offen“ verschoben');
+    refresh();
+    if (!r.matched_sample) return d.close();
+    // Verwechselt mit diesem Lernbild - war das selbst falsch zugeordnet?
+    const rm = el('button', {className:'b bad', textContent:'Dieses Bild entfernen'});
+    rm.onclick = () => act(rm, async () => { await api(`/api/samples/${r.matched_sample.id}`, {method:'DELETE'}); toast('Entfernt'); d.close(); refresh(); });
+    body.replaceChildren(
+      el('div', {textContent:`Verwechselt wurde mit diesem Bild von ${r.matched_sample.person}:`}),
+      el('div', {className:'faces', style:'margin:10px 0'}, el('img', {src:r.matched_sample.crop, alt:''})),
+      el('div', {className:'muted', textContent:`Zeigt es gar nicht ${r.matched_sample.person}, entferne es – sonst kommt es wieder zu Verwechslungen.`}),
+      el('div', {className:'row'}, rm, el('button', {className:'b', textContent:'Passt, behalten', onclick: () => d.close()})));
+  });
+  ok.onclick = () => name.value.trim() ? send(name.value) : name.focus();
+  name.onkeydown = e => { if (e.key === 'Enter' && name.value.trim()) send(name.value); };
+  unk.onclick = () => send('');
+  body.append(el('div', {className:'pname', textContent:`Als ${f.name} erkannt – falsch?`}),
+    el('div', {className:'faces', style:'margin:10px 0'}, f.crop ? el('img', {src:f.crop, alt:''}) : null),
+    el('div', {className:'row'}, name), el('div', {className:'row'}, ok, unk, close));
+  d.showModal(); name.focus();
+}
+
+// ---------------------------------------------------------------- Test
+$('test-btn').onclick = () => { const f = $('test-file').files[0]; if (!f) return $('test-file').click();
+  act($('test-btn'), async () => {
+    const fd = new FormData(); fd.append('image', f);
+    const r = await api('/api/recognize', {method:'POST', body:fd});
+    $('test-res').replaceChildren(el('div', {className:'pname', textContent:r.text}),
+      el('div', {className:'muted', textContent:r.faces.map(x => x.known ? `${x.name} ${Math.round(x.score * 100)} %`
+        : `unbekannt${x.suggestion ? ' (ähnlich ' + x.suggestion + ' ' + Math.round(x.score * 100) + ' %)' : ''}`).join(' · ') || 'kein Gesicht gefunden'}));
+    refresh();
+  }); };
+
+// ---------------------------------------------------------------- Rahmen
+let tab = 'open';
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  for (const t of ['open', 'persons', 'events', 'test']) $('t-' + t).hidden = t !== tab;
+  refresh();
+});
+async function refresh() {
+  try { await Promise.all([loadOpen(), loadPersons(), tab === 'events' ? loadEvents() : null]); }
+  catch (e) { toast(e.message, true); }
+}
+api('/api/settings').then(s => $('info').textContent = (s.providers || []).map(p => p.replace('ExecutionProvider', '')).join(', ') +
+  (s.version ? ' · v' + s.version : '')).catch(() => {});
+refresh();
+setInterval(() => { if (!document.hidden && tab === 'open') loadOpen().catch(() => {}); }, 15000);
+</script>
+</body>
+</html>

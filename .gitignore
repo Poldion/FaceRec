@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Laufzeitdaten (Personen, Gesichter) und Einstellungen mit Schluesseln
+data/
+models/
+testbilder/
+*.env
+!facerec.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Interne Arbeitslisten
+VERBESSERUNGEN*.md

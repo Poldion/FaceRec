@@ -1,0 +1,79 @@
+# FACEREC_HOST durch Adresse/Namen des Rechners mit der Gesichtserkennung ersetzen (z.B. 192.168.1.20).
+# Home-Assistant-Paket fuer die Gesichtserkennung an der Tuerklingel.
+#
+# Einbinden: Datei nach /config/packages/facerec.yaml und in configuration.yaml
+#   homeassistant:
+#     packages: !include_dir_named packages
+# Danach HA neu starten. Die Automationen (Vorlage automations.yaml) nutzen die Klingel- und Handy-Entitaeten.
+#
+# Ablauf: Klingel -> auf das neue Ereignisbild warten -> Dienst erkennt Gesichter -> Push mit Bild.
+# Bei unbekanntem Gesicht hat die Push-Nachricht Knoepfe: "Ist <Vorschlag>", "Name eingeben"
+# (Texteingabe; ein vorhandener Name ordnet der Person zu, ein neuer legt sie an), "Verwerfen".
+
+rest_command:
+  facerec_recognize:
+    url: "http://FACEREC_HOST:8191/api/recognize"
+    method: POST
+    content_type: application/json
+    payload: '{"entity_id": "{{ entity_id }}"}'
+    timeout: 30
+    # Nur wenn FACEREC_TOKEN gesetzt ist (Schluessel in secrets.yaml: facerec_auth: "Bearer ..."):
+    # headers:
+    #   Authorization: !secret facerec_auth
+  facerec_assign:
+    url: "http://FACEREC_HOST:8191/api/unknowns/{{ unknown_id }}/assign"
+    method: POST
+    content_type: application/json
+    payload: "{{ {'name': name} | to_json }}"
+  facerec_correct:
+    # "Falsch erkannt": Name = richtige Person (wird gelernt), leer/"?" = unbekannt (kommt nach "Offen")
+    url: "http://FACEREC_HOST:8191/api/recent/{{ recent_id }}/correct"
+    method: POST
+    content_type: application/json
+    payload: "{{ {'name': name} | to_json }}"
+  facerec_ignore:
+    url: "http://FACEREC_HOST:8191/api/unknowns/{{ unknown_id }}/ignore"
+    method: POST
+    content_type: application/json
+    payload: "{}"
+
+
+# Die beiden Automationen ("Klingel: Gesicht erkennen", "Klingel: Gesicht zuweisen (Push-Knopf)")
+# liegen seit 2026-10-22 in automations.yaml (in der HA-Oberflaeche bearbeitbar), Vorlage:
+# facerec/homeassistant/automations.yaml im Repo.
+
+# ------------------------------------------------------------------ Entitaeten
+template:
+  # Wer zuletzt geklingelt hat. Behaelt den Wert ueber HA-Neustarts.
+  - triggers:
+      - trigger: event
+        event_type: facerec_erkannt
+    sensor:
+      - name: "Klingel Besucher"
+        unique_id: facerec_klingel_besucher
+        icon: mdi:doorbell-video
+        state: "{{ trigger.event.data.text[:255] }}"
+        attributes:
+          satz: "{{ trigger.event.data.sentence }}"
+          event_id: "{{ trigger.event.data.event_id | default(none) }}"
+          namen: "{{ trigger.event.data.names }}"
+          bekannt: "{{ trigger.event.data.known }}"
+          unbekannte: "{{ trigger.event.data.unknown_count | int(0) }}"
+          gesichter: "{{ trigger.event.data.face_count | int(0) }}"
+          erkennung_ok: "{{ trigger.event.data.ok }}"
+          zeitpunkt: "{{ now().isoformat() }}"
+
+sensor:
+  # Noch nicht zugewiesene Gesichter (Gruppen = vermutlich verschiedene Personen)
+  - platform: rest
+    name: "Klingel offene Gesichter"
+    unique_id: facerec_offene_gesichter
+    resource: "http://FACEREC_HOST:8191/api/unknowns"
+    scan_interval: 300
+    timeout: 10
+    icon: mdi:account-question
+    unit_of_measurement: "Gesichter"
+    value_template: "{{ value_json | map(attribute='faces') | map('length') | sum }}"
+    # Nur wenn FACEREC_TOKEN gesetzt ist:
+    # headers:
+    #   Authorization: !secret facerec_auth

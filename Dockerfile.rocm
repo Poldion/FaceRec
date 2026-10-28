@@ -1,0 +1,40 @@
+# Gesichtserkennung mit GPU (Radeon 8060S / gfx1151) ueber ONNX Runtime + MIGraphX (ROCm 7.2).
+# Basis = dasselbe ROCm-Image wie ComfyUI in ImageGen (Schichten oft schon vorhanden, kaum zusaetzlicher Platz).
+# Gebaut ueber docker-compose.rocm.yml; startet die GPU nicht, laeuft der Dienst automatisch mit CPU weiter.
+FROM rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0
+LABEL org.opencontainers.image.title="FaceRec" \
+      org.opencontainers.image.source="https://github.com/Poldion/FaceRec" \
+      org.opencontainers.image.licenses="MIT"
+
+WORKDIR /app
+COPY requirements.txt .
+# onnxruntime (CPU) weglassen: onnxruntime-migraphx bringt dasselbe Modul mit GPU-Unterstuetzung
+RUN grep -v '^onnxruntime' requirements.txt > /tmp/req.txt \
+ && pip install --no-cache-dir -r /tmp/req.txt \
+ && pip install --no-cache-dir -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/ onnxruntime-migraphx==1.23.2
+
+ARG MODELS_URL=https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip
+ARG MODELS_SHA256=80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f
+RUN python -c "import hashlib, io, sys, urllib.request, zipfile; \
+d = urllib.request.urlopen('$MODELS_URL', timeout=600).read(); \
+h = hashlib.sha256(d).hexdigest(); \
+sys.exit('Pruefsumme falsch: ' + h) if h != '$MODELS_SHA256' else None; \
+z = zipfile.ZipFile(io.BytesIO(d)); [z.extract(n, '/models') for n in ('det_10g.onnx', 'w600k_r50.onnx')]"
+
+COPY engine.py tracker.py app.py ./
+COPY static ./static
+
+ENV FACEREC_MODELS=/models \
+    FACEREC_DATA=/data \
+    FACEREC_PORT=8191 \
+    PYTHONUNBUFFERED=1 \
+    FACEREC_PROVIDERS=MIGraphXExecutionProvider,CPUExecutionProvider \
+    ORT_MIGRAPHX_FP16_ENABLE=1 \
+    ORT_MIGRAPHX_MODEL_CACHE_PATH=/data/migraphx-cache
+EXPOSE 8191
+
+# Beim allerersten Start kompiliert MIGraphX die Modelle (~2 min), danach aus dem Cache
+HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8191/health', timeout=4)"]
+
+CMD ["python", "app.py"]

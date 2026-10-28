@@ -1,0 +1,165 @@
+# Vorlage der Klingel-Automationen (in HA: /config/automations.yaml, dort per Oberflaeche gepflegt).
+# Entitaeten anpassen: binary_sensor.haustuer_klingel_ringing, image.haustuer_klingel_event_image (Klingel),
+# notify.mobile_app_mein_handy (Handy-App), media_player.wohnzimmer_echo (Ansage, optional).
+- id: '1792702634201'
+  alias: 'Klingel: Gesicht erkennen'
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.haustuer_klingel_ringing
+    to: 'on'
+  conditions: []
+  actions:
+  - wait_for_trigger:
+    - trigger: state
+      entity_id: image.haustuer_klingel_event_image
+    timeout: 00:00:10
+    continue_on_timeout: true
+  - action: rest_command.facerec_recognize
+    data:
+      entity_id: '{{ bild }}'
+    response_variable: fr
+    continue_on_error: true
+  - variables:
+      res: '{{ fr.content if fr is defined and fr.status == 200 else none }}'
+      offen: '{{ (res.faces | selectattr(''known'', ''false'') | list | first) if res and res.unknown_count else
+        none }}'
+      falsch: '{{ (res.faces | selectattr(''known'') | selectattr(''recent_id'', ''defined'') | list | first) if
+        res and res.names else none }}'
+  - event: facerec_erkannt
+    event_data:
+      text: '{{ res.text if res else ''unbekannt (Erkennung nicht erreichbar)'' }}'
+      sentence: '{{ res.sentence if res else ''Es klingelt.'' }}'
+      names: '{{ res.names if res else [] }}'
+      known: '{{ res.known if res else false }}'
+      unknown_count: '{{ res.unknown_count if res else 0 }}'
+      face_count: '{{ res.face_count if res else 0 }}'
+      ok: '{{ res is not none }}'
+      event_id: '{{ res.event_id if res else none }}'
+  - action: homeassistant.update_entity
+    target:
+      entity_id: sensor.klingel_offene_gesichter
+    continue_on_error: true
+  - action: notify.alexa_media
+    continue_on_error: true
+    data:
+      message: '{{ res.sentence if res and res.face_count else ''Es hat geklingelt.'' }}'
+      data:
+        type: tts
+      target:
+      - media_player.wohnzimmer_echo
+  - action: notify.mobile_app_mein_handy
+    data:
+      title: Es klingelt
+      message: '{{ res.sentence if res else ''Es klingelt (Gesichtserkennung nicht erreichbar).'' }}'
+      data:
+        image: /api/image_proxy/{{ bild }}
+        tag: klingel
+        actions: |-
+          {% if offen %}
+            {% set a = [] %}
+            {% if offen.suggestion %}
+              {% set a = a + [{'action': 'FACEREC_ASSIGN|' ~ offen.unknown_id ~ '|' ~ offen.suggestion,
+                               'title': 'Ist ' ~ offen.suggestion}] %}
+            {% endif %}
+            {% set a = a + [{'action': 'FACEREC_NAME|' ~ offen.unknown_id, 'title': 'Name eingeben',
+                             'behavior': 'textInput', 'textInputButtonTitle': 'Zuweisen',
+                             'textInputPlaceholder': 'Name'},
+                            {'action': 'FACEREC_IGNORE|' ~ offen.unknown_id, 'title': 'Verwerfen'}] %}
+            {{ a }}
+          {% elif falsch %}
+            [{'action': 'FACEREC_WRONG|' ~ falsch.recent_id, 'title': 'Falsch erkannt',
+              'behavior': 'textInput', 'textInputButtonTitle': 'Korrigieren',
+              'textInputPlaceholder': 'Wer war es? (leer = unbekannt)'}]
+          {% else %}[]{% endif %}
+  mode: queued
+  max: 5
+  variables:
+    bild: image.haustuer_klingel_event_image
+- id: '1792702683653'
+  alias: 'Klingel: Gesicht zuweisen (Push-Knopf)'
+  description: ''
+  triggers:
+  - trigger: event
+    event_type: mobile_app_notification_action
+  conditions:
+  - condition: template
+    value_template: '{{ trigger.event.data.action is string and trigger.event.data.action.startswith(''FACEREC_'')
+      }}'
+  actions:
+  - variables:
+      teile: '{{ trigger.event.data.action.split(''|'') }}'
+      art: '{{ teile[0] }}'
+      uid: '{{ teile[1] }}'
+      name: '{{ teile[2] if art == ''FACEREC_ASSIGN'' else (trigger.event.data.reply_text | default('''') | trim)
+        }}'
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ art == ''FACEREC_WRONG'' }}'
+      sequence:
+      - action: rest_command.facerec_correct
+        data:
+          recent_id: '{{ uid }}'
+          name: '{{ name }}'
+        response_variable: ko
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.klingel_offene_gesichter
+        continue_on_error: true
+      - if:
+        - condition: template
+          value_template: '{{ ko.status == 200 and ko.content.event is mapping and ko.content.event.event_id | string
+            == state_attr(''sensor.klingel_besucher'', ''event_id'') | string }}'
+        then:
+        - event: facerec_erkannt
+          event_data:
+            event_id: '{{ ko.content.event.event_id }}'
+            text: '{{ ko.content.event.text }}'
+            sentence: '{{ ko.content.event.sentence }}'
+            names: '{{ ko.content.event.names }}'
+            known: '{{ ko.content.event.known }}'
+            unknown_count: '{{ ko.content.event.unknown_count }}'
+            face_count: '{{ ko.content.event.face_count }}'
+            ok: true
+      - action: notify.mobile_app_mein_handy
+        data:
+          data:
+            tag: klingel
+          message: '{% if ko.status != 200 %}Korrigieren ging nicht: {{ ko.content.detail | default(ko.status) }}{%
+            elif ko.content.name %}Korrigiert: {{ ko.content.name }}{{ '' (neu angelegt)'' if ko.content.created
+            }} statt {{ ko.content.was }}. Wird gelernt.{% else %}Statt {{ ko.content.was }}: unbekannt. Steht jetzt
+            unter "Offen" in der Gesichter-Seite.{% endif %}'
+    - conditions:
+      - condition: template
+        value_template: '{{ art == ''FACEREC_IGNORE'' }}'
+      sequence:
+      - action: rest_command.facerec_ignore
+        data:
+          unknown_id: '{{ uid }}'
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.klingel_offene_gesichter
+        continue_on_error: true
+    - conditions:
+      - condition: template
+        value_template: '{{ name | length > 0 }}'
+      sequence:
+      - action: rest_command.facerec_assign
+        data:
+          unknown_id: '{{ uid }}'
+          name: '{{ name }}'
+        response_variable: zu
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.klingel_offene_gesichter
+        continue_on_error: true
+      - action: notify.mobile_app_mein_handy
+        data:
+          message: |-
+            {{ 'Gemerkt: ' ~ zu.content.name ~ (' (neu angelegt)' if zu.content.created else '')
+               if zu.status == 200 else 'Zuweisen ging nicht: ' ~ (zu.content.detail | default(zu.status)) }}
+          data:
+            tag: klingel
+  mode: queued
+

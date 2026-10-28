@@ -1,0 +1,19 @@
+# GPU-Variante (Radeon 8060S, ROCm 7.2) - Zusatz zu docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.rocm.yml --env-file ~/facerec/facerec.env up -d --build
+# Zurueck auf CPU: dieselbe Zeile ohne "-f docker-compose.rocm.yml".
+services:
+  facerec:
+    build:
+      context: .
+      dockerfile: Dockerfile.rocm
+    image: facerec:rocm
+    environment:
+      FACEREC_PROVIDERS: MIGraphXExecutionProvider,CPUExecutionProvider
+      ORT_MIGRAPHX_FP16_ENABLE: "1"
+      ORT_MIGRAPHX_MODEL_CACHE_PATH: /data/migraphx-cache
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - "${RENDER_GID:-992}"   # getent group render
+      - "${VIDEO_GID:-44}"     # getent group video
