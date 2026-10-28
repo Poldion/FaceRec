@@ -21,7 +21,8 @@ h = hashlib.sha256(d).hexdigest(); \
 sys.exit('Pruefsumme falsch: ' + h) if h != '$MODELS_SHA256' else None; \
 z = zipfile.ZipFile(io.BytesIO(d)); [z.extract(n, '/models') for n in ('det_10g.onnx', 'w600k_r50.onnx')]"
 
-COPY engine.py tracker.py app.py ./
+COPY engine.py tracker.py app.py i18n.py ./
+COPY locales ./locales
 COPY static ./static
 
 ENV FACEREC_MODELS=/models \

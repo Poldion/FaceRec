@@ -25,11 +25,14 @@ import httpx
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+import i18n
 
 import tracker
 
-__version__ = "0.1.0"          # SemVer; einzige Stelle (Oberflaeche, /api/settings, /proxy-module)
+__version__ = "0.2.0"          # SemVer; einzige Stelle (Oberflaeche, /api/settings, /proxy-module)
 
 DATA = os.environ.get("FACEREC_DATA", "./data")
 MODELS = os.environ.get("FACEREC_MODELS", "./models")
@@ -47,6 +50,8 @@ KEEP_EVENTS = int(os.environ.get("FACEREC_KEEP_EVENTS", "300"))
 RECENT_HOURS = float(os.environ.get("FACEREC_RECENT_HOURS", "48"))   # so lange sind Erkennungen korrigierbar
 MAX_UPLOAD = 20 * 1024 * 1024
 PORT = int(os.environ.get("FACEREC_PORT", "8191"))
+LANG = "en" if os.environ.get("FACEREC_LANG", "de").lower().startswith("en") else "de"  # Sprache der Ansage
+LANG_HEADER = "x-facerec-lang"                                # Sprache der Oberfläche fuer Server-Meldungen
 MAX_FPS = float(os.environ.get("FACEREC_STREAM_FPS", "12"))   # Stream-Scan: hoechstens so viele Bilder/s auswerten
 # Stream-Scan: Kamera-Entitaet -> eigene MJPEG-Adresse (z.B. ESP32 direkt, ohne Umweg ueber Home Assistant),
 # Komma-getrennt: "camera.flur=http://192.168.1.50:8080/,camera.garten=http://..."
@@ -134,23 +139,30 @@ def drop_unused_snapshots(con):
         con.execute("UPDATE events SET snapshot = NULL WHERE id = ?", (r["id"],))
 
 
-def say(names: list[str], unknown: int) -> str:
-    """Deutscher Satzteil fuer Ansage/Push: 'Anna und eine unbekannte Person'."""
-    words = {1: "eine", 2: "zwei", 3: "drei", 4: "vier"}
+def say(names: list[str], unknown: int, lang: str | None = None) -> str:
+    """Satzteil fuer Ansage/Push: 'Anna und eine unbekannte Person' (Sprache: FACEREC_LANG)."""
+    en = (lang or LANG) == "en"
+    words = ({1: "an", 2: "two", 3: "three", 4: "four"} if en else {1: "eine", 2: "zwei", 3: "drei", 4: "vier"})
     parts = list(names)
     if unknown:
-        parts.append(f"{words.get(unknown, unknown)} unbekannte Person" + ("en" if unknown > 1 else ""))
+        if en:
+            parts.append(f"{words.get(unknown, unknown)} unknown " + ("people" if unknown > 1 else "person"))
+        else:
+            parts.append(f"{words.get(unknown, unknown)} unbekannte Person" + ("en" if unknown > 1 else ""))
     if not parts:
-        return "niemand erkennbar"
-    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " und " + parts[-1]
+        return "no one recognisable" if en else "niemand erkennbar"
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + (" and " if en else " und ") + parts[-1]
 
 
-def sentence(names: list[str], unknown: int) -> str:
-    """Ganzer Satz fuer Push/Ansage: 'Anna und Bob stehen vor der Tuer.'"""
+def sentence(names: list[str], unknown: int, lang: str | None = None) -> str:
+    """Ganzer Satz fuer Push/Ansage: 'Anna und Bob stehen vor der Tuer.' / 'Anna and Bob are at the door.'"""
+    en = (lang or LANG) == "en"
     if not names and not unknown:
-        return "Es klingelt, kein Gesicht erkennbar."
-    text = say(names, unknown)
+        return "Someone is at the door, no face visible." if en else "Es klingelt, kein Gesicht erkennbar."
+    text = say(names, unknown, lang)
     many = len(names) + unknown > 1
+    if en:
+        return text[0].upper() + text[1:] + (" are" if many else " is") + " at the door."
     return text[0].upper() + text[1:] + (" stehen" if many else " steht") + " vor der Tür."
 
 
@@ -220,18 +232,27 @@ async def _purge_loop():
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    # Meldungen entstehen auf Deutsch; Englisch, wenn die Oberflaeche (Kopfzeile) oder der Client es wuenscht
+    detail = i18n.translate(exc.detail, i18n.request_lang(request.headers, LANG_HEADER))
+    return JSONResponse({"detail": detail}, status_code=exc.status_code, headers=getattr(exc, "headers", None))
+
+
 @app.middleware("http")
 async def guard(request: Request, call_next):
     path = request.url.path
     # Fremde Webseiten duerfen nichts ausloesen (Home Assistant schickt keinen Origin-Kopf)
     if request.method not in ("GET", "HEAD") and (origin := request.headers.get("origin")):
         if origin.split("://", 1)[-1] != request.headers.get("host", ""):
-            return JSONResponse({"detail": "Fremder Ursprung"}, status_code=403)
+            return JSONResponse({"detail": i18n.translate("Fremder Ursprung", i18n.request_lang(request.headers, LANG_HEADER))},
+                                status_code=403)
     if TOKEN and path.startswith("/api/"):
         auth = request.headers.get("authorization", "")
         given = auth[7:] if auth.lower().startswith("bearer ") else request.cookies.get("facerec_token", "")
         if not secrets.compare_digest(given.encode(), TOKEN.encode()):
-            return JSONResponse({"detail": "Anmeldung noetig"}, status_code=401)
+            return JSONResponse({"detail": i18n.translate("Anmeldung noetig", i18n.request_lang(request.headers, LANG_HEADER))},
+                                status_code=401)
     resp = await call_next(request)
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Referrer-Policy"] = "no-referrer"
@@ -248,6 +269,11 @@ async def health():
 @app.get("/")
 async def index():
     return FileResponse(os.path.join(STATIC, "index.html"))
+
+
+@app.get("/i18n.js")
+async def i18n_js():
+    return Response(i18n.script("facerec.lang", "X-FaceRec-Lang"), media_type="text/javascript; charset=utf-8")
 
 
 @app.get("/media/{kind}/{name}")
@@ -953,16 +979,17 @@ def _rss() -> int | None:
 
 
 @app.get("/proxy-module")
-async def proxy_module():
+async def proxy_module(request: Request):
+    lang = i18n.request_lang(request.headers, LANG_HEADER)
     return {"name": "FaceRec", "version": __version__,
-            "links": [{"label": "Gesichter öffnen", "path": "/"}], "capabilities": ["memory"]}
+            "links": [{"label": i18n.tr("Gesichter öffnen", lang), "path": "/"}], "capabilities": ["memory"]}
 
 
 @app.get("/proxy-module/memory")
-async def proxy_module_memory():
+async def proxy_module_memory(request: Request):
     rss = _rss()
     return {"rss": rss, "gpu": 0, "held": rss or 0, "reclaimable": False, "busy": False,
-            "detail": "Erkennungsmodell geladen"}
+            "detail": i18n.tr("Erkennungsmodell geladen", i18n.request_lang(request.headers, LANG_HEADER))}
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ oder in der Oberfläche einer Person zugewiesen. So lernt der Dienst dazu. Alles
 | **Stream-Scan** | Liest einen MJPEG-Stream (z. B. ESP32-Kamera) für einige Sekunden und verfolgt jedes Gesicht als Spur |
 | **Home Assistant** | Paket mit `rest_command` und Sensoren, Vorlagen für die Automationen |
 | **OllamaProxy-Modul** | Erscheint mit Link und Speicher in der Oberfläche des [OllamaProxy](https://github.com/Poldion/OllamaProxy) (`/proxy-module`) |
-| **Oberfläche** | Offene Gesichter, Personen, Verlauf, Test-Upload; auf Deutsch |
+| **Oberfläche** | Offene Gesichter, Personen, Verlauf, Test-Upload; auf Deutsch und Englisch |
 
 ## Schnellstart
 
@@ -50,6 +50,7 @@ nach `/config/packages/` kopieren und `FACEREC_HOST` darin ersetzen. Die Automat
 | `FACEREC_TOKEN` | – | Optionaler Schlüssel für API und Oberfläche |
 | `FACEREC_MATCH` / `FACEREC_SUGGEST` | `0.32` / `0.28` | Schwellen für „erkannt“ und „Vorschlag“ |
 | `FACEREC_RECENT_HOURS` | `48` | So lange bleiben erkannte Gesichter zum Korrigieren |
+| `FACEREC_LANG` | `de` | Sprache des Ansage- und Push-Satzes (`de` oder `en`); die Oberfläche hat einen eigenen Umschalter |
 | `FACEREC_PROVIDERS` | `CPUExecutionProvider` | ONNX-Rechenwerk (GPU/NPU) |
 | `FACEREC_STREAM_URLS` | – | Stream-Scan: eigene MJPEG-Adressen je Kamera, z. B. `camera.flur=http://192.168.1.50:8080/` |
 | `RENDER_GID` / `VIDEO_GID` | `992` / `44` | Nur ROCm-Variante: GPU-Gruppen des Hosts |
@@ -94,7 +95,7 @@ flowchart LR
 
 ## Dokumentation
 
-- [docs/technik.md](docs/technik.md) – Modelle, Messwerte, Stream-Scan, Home-Assistant-Anbindung, API
+- [docs/technik.md](docs/technik.md) – Modelle, Messwerte, Stream-Scan, Home-Assistant-Anbindung, API (Englisch: [technik.en.md](docs/technik.en.md))
 - [CHANGELOG.md](CHANGELOG.md) – Versionsverlauf (nur Englisch)
 - [CONTRIBUTING.md](CONTRIBUTING.md) – Entwicklungsumgebung, Tests, Regeln (nur Englisch, mit deutschem Abschnitt)
 - [SECURITY.md](SECURITY.md) – Sicherheitslücken melden (nur Englisch)

@@ -15,6 +15,7 @@ services:
       FACEREC_MATCH: ${FACEREC_MATCH:-0.32}
       FACEREC_SUGGEST: ${FACEREC_SUGGEST:-0.28}
       FACEREC_STREAM_URLS: ${FACEREC_STREAM_URLS:-}
+      FACEREC_LANG: ${FACEREC_LANG:-de}
       FACEREC_PROVIDERS: ${FACEREC_PROVIDERS:-CPUExecutionProvider}
     volumes:
       # Personen, Gesichtsausschnitte, offene Standbilder (SQLite + JPEGs)

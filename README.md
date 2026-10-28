@@ -12,7 +12,7 @@
 ## Overview
 
 A small service (port 8191) that receives the doorbell image from Home Assistant when someone rings, recognizes the
-faces and returns a sentence – "Anna steht vor der Tür." ("Anna is at the door."). Unknown faces end up under "Offen"
+faces and returns a sentence – "Anna is at the door." (or in German with `FACEREC_LANG=de`, the default). Unknown faces end up under "Offen"
 (open) and are assigned to a person via a push notification button or in the UI. That's how the service learns.
 Everything stays local.
 
@@ -26,7 +26,7 @@ Everything stays local.
 | **Stream scan** | Reads an MJPEG stream (e.g. ESP32 camera) for a few seconds and tracks every face |
 | **Home Assistant** | Package with `rest_command` and sensors, templates for the automations |
 | **OllamaProxy module** | Shows up with link and memory in the [OllamaProxy](https://github.com/Poldion/OllamaProxy) UI (`/proxy-module`) |
-| **UI** | Open faces, people, history, test upload; in German |
+| **UI** | Open faces, people, history, test upload; in English and German |
 
 ## Quick start
 
@@ -51,6 +51,7 @@ to `/config/packages/` and replace `FACEREC_HOST` in it. The automations in
 | `FACEREC_TOKEN` | – | Optional key for API and UI |
 | `FACEREC_MATCH` / `FACEREC_SUGGEST` | `0.32` / `0.28` | Thresholds for "recognized" and "suggestion" |
 | `FACEREC_RECENT_HOURS` | `48` | How long recognized faces are kept for corrections |
+| `FACEREC_LANG` | `de` | Language of the announcement and push sentence (`de` or `en`); the UI has its own switch |
 | `FACEREC_PROVIDERS` | `CPUExecutionProvider` | ONNX execution provider (GPU/NPU) |
 | `FACEREC_STREAM_URLS` | – | Stream scan: own MJPEG URLs per camera, e.g. `camera.hall=http://192.168.1.50:8080/` |
 | `RENDER_GID` / `VIDEO_GID` | `992` / `44` | ROCm variant only: GPU groups of the host |
@@ -95,9 +96,9 @@ flowchart LR
 
 ## Documentation
 
-- [docs/technik.md](docs/technik.md) – models, measurements, stream scan, Home Assistant integration, API (German)
+- [docs/technik.en.md](docs/technik.en.md) – models, measurements, stream scan, Home Assistant integration, API (German: [technik.md](docs/technik.md))
 - [CHANGELOG.md](CHANGELOG.md) – version history
-- [CONTRIBUTING.md](CONTRIBUTING.md) – development setup, tests, guidelines
+- [CONTRIBUTING.md](CONTRIBUTING.md) – development setup, tests, guidelines, translations
 - [SECURITY.md](SECURITY.md) – reporting security issues
 
 ## Development

@@ -282,6 +282,35 @@ def test_sentence():
     assert sentence(["Anna"], 1) == "Anna und eine unbekannte Person stehen vor der Tür."
 
 
+def test_sentence_english():
+    from app import sentence
+    assert sentence([], 0, "en") == "Someone is at the door, no face visible."
+    assert sentence(["Anna"], 0, "en") == "Anna is at the door."
+    assert sentence([], 1, "en") == "An unknown person is at the door."
+    assert sentence(["Anna", "Bob"], 2, "en") == "Anna, Bob and two unknown people are at the door."
+
+
+# ------------------------------------------------------------------ Sprache
+
+def test_i18n_script_and_translated_errors(env):
+    c, _, _ = env
+    js = c.get("/i18n.js")
+    assert js.status_code == 200 and "window.I18N" in js.text and '"Verlauf": "History"' in js.text
+    assert c.delete("/api/persons/999").json()["detail"] == "Person nicht gefunden"
+    assert c.delete("/api/persons/999", headers={"X-FaceRec-Lang": "en"}).json()["detail"] == "Person not found"
+    assert c.delete("/api/persons/999", headers={"Accept-Language": "en-US,en"}).json()["detail"] == "Person not found"
+    r = c.post("/api/recent/999/correct", json={"name": "Max"}, headers={"X-FaceRec-Lang": "en"})
+    assert r.status_code == 404 and r.json()["detail"] == "Recognition no longer exists (deleted after 48 h)"
+    assert c.get("/proxy-module", headers={"Accept-Language": "en"}).json()["links"][0]["label"] == "Open faces"
+
+
+def test_all_texts_translated():
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out = subprocess.run([sys.executable, os.path.join(root, "scripts", "check_i18n.py")], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+
+
 # ------------------------------------------------------------------ Falsch erkannt
 
 def _learn(c, person, name, variant=1):

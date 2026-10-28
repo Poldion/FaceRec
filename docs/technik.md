@@ -1,5 +1,7 @@
 # Technik und Hintergründe
 
+🇬🇧 [English](technik.en.md) · 🇩🇪 Deutsch
+
 Ergänzung zur [README](../README.md). Der Dienst (Port **8191**) bekommt beim Klingeln das Bild der Klingel aus Home
 Assistant, erkennt die Gesichter und gibt das Ergebnis zurück („Anna steht vor der Tür.“). Unbekannte Gesichter landen
 unter „Offen“ und werden per Push-Knopf oder in der Oberfläche einer Person zugewiesen – damit lernt der Dienst dazu.

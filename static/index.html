@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111214">
 <title>Gesichter</title>
+<script src="i18n.js"></script>
 <style>
   :root { --bg:#111214; --card:#1b1c20; --line:#2a2c31; --text:#e8e8ea; --muted:#9a9ca3; --acc:#d6b25e;
           --bad:#e5786d; --ok:#7cc48a; --r:12px; }
@@ -46,11 +47,13 @@
   button.b.sm { padding:4px 9px; font-size:13px; }
   dialog { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:16px; width:min(420px, calc(100vw - 32px)); }
   dialog::backdrop { background:rgba(0,0,0,.6); }
+  .head-r { display:flex; align-items:center; gap:10px; }
+  .lang-switch { background:none; border:1px solid var(--line); color:var(--muted); border-radius:8px; padding:3px 8px; font:inherit; font-size:12px; cursor:pointer; }
 </style>
 </head>
 <body>
 <main>
-  <header><h1>Gesichter</h1><span class="muted" id="info"></span></header>
+  <header><h1>Gesichter</h1><div class="head-r"><span class="muted" id="info"></span><span id="lang"></span></div></header>
   <div class="tabs">
     <button data-tab="open" class="on">Offen<span class="badge" id="n-open" hidden></span></button>
     <button data-tab="persons">Personen</button>
@@ -84,6 +87,8 @@
 
 <script>
 const $ = id => document.getElementById(id);
+i18nApply();
+$('lang').replaceWith(langSwitch());
 let persons = [];
 
 function toast(msg, err) {
@@ -94,16 +99,16 @@ async function api(path, opt = {}) {
   if (opt.json !== undefined) { opt.body = JSON.stringify(opt.json); opt.headers = {'Content-Type': 'application/json'}; }
   const r = await fetch(path, opt);
   if (r.status === 401) {
-    const tok = prompt('Zugangsschlüssel (FACEREC_TOKEN):');
+    const tok = prompt(tr('Zugangsschlüssel (FACEREC_TOKEN):'));
     if (tok) { document.cookie = 'facerec_token=' + encodeURIComponent(tok) + '; path=/; max-age=31536000; SameSite=Strict'; return api(path, opt); }
-    throw new Error('Anmeldung nötig');
+    throw new Error(tr('Anmeldung nötig'));
   }
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.detail || ('Fehler ' + r.status));
+  if (!r.ok) throw new Error(j.detail || tr('Fehler {status}', {status: r.status}));
   return j;
 }
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter(k => k != null)); return e; };
-const when = ts => new Date(ts * 1000).toLocaleString('de-DE', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+const when = ts => new Date(ts * 1000).toLocaleString(LOCALE, {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
 function img(src, big) { const i = el('img', {src, loading:'lazy', alt:''}); i.onclick = () => lightbox(big || src); return i; }
 function lightbox(src) { $('lb').querySelector('img').src = src; $('lb').style.display = 'flex'; }
 $('lb').onclick = () => $('lb').style.display = 'none';
@@ -115,25 +120,26 @@ async function loadOpen() {
   const n = groups.reduce((s, g) => s + 1, 0);
   $('n-open').hidden = !n; $('n-open').textContent = n;
   const box = $('t-open'); box.replaceChildren();
-  if (!groups.length) { box.append(el('div', {className:'empty', textContent:'Keine offenen Gesichter. Neue unbekannte Besucher erscheinen hier.'})); return; }
+  if (!groups.length) { box.append(el('div', {className:'empty', textContent:tr('Keine offenen Gesichter. Neue unbekannte Besucher erscheinen hier.')})); return; }
   for (const g of groups) {
     const first = g.faces[0];
-    const name = el('input', {type:'text', placeholder:'Name (vorhandene Person oder neu)'}); name.setAttribute('list', 'names');
-    const go = el('button', {className:'b pri', textContent:'Zuweisen'});
+    const name = el('input', {type:'text', placeholder:tr('Name (vorhandene Person oder neu)')}); name.setAttribute('list', 'names');
+    const go = el('button', {className:'b pri', textContent:tr('Zuweisen')});
     const assign = n => act(go, async () => {
       const r = await api(`/api/unknowns/${first.id}/assign`, {method:'POST', json:{name:n}});
-      toast(`${r.assigned} Gesicht${r.assigned > 1 ? 'er' : ''} → ${r.name}${r.created ? ' (neu)' : ''}`); refresh();
+      toast((r.assigned > 1 ? tr('{n} Gesichter → {name}', {n: r.assigned, name: r.name}) : tr('{n} Gesicht → {name}', {n: r.assigned, name: r.name})) + (r.created ? tr(' (neu)') : '')); refresh();
     });
     go.onclick = () => name.value.trim() ? assign(name.value) : name.focus();
     name.onkeydown = e => { if (e.key === 'Enter' && name.value.trim()) assign(name.value); };
-    const ign = el('button', {className:'b bad', textContent:'Verwerfen'});
+    const ign = el('button', {className:'b bad', textContent:tr('Verwerfen')});
     ign.onclick = () => act(ign, async () => { await api(`/api/unknowns/${first.id}/ignore`, {method:'POST', json:{}}); refresh(); });
-    const sug = g.suggestion ? el('button', {className:'b', textContent:`Ist ${g.suggestion}`, title:`Ähnlichkeit ${Math.round(g.suggestion_score * 100)} %`}) : null;
+    const sug = g.suggestion ? el('button', {className:'b', textContent:tr('Ist {name}', {name: g.suggestion}), title:tr('Ähnlichkeit {p} %', {p: Math.round(g.suggestion_score * 100)})}) : null;
     if (sug) sug.onclick = () => assign(g.suggestion);
     box.append(el('div', {className:'card'},
       el('div', {className:'faces'}, ...g.faces.map(f => img(f.crop, f.snapshot || f.crop))),
       el('div', {className:'muted', style:'margin-top:6px', textContent:
-        `${g.faces.length > 1 ? g.faces.length + ' Aufnahmen, vermutlich dieselbe Person · ' : ''}zuletzt ${when(first.created)} · Antippen zeigt das ganze Bild`}),
+        (g.faces.length > 1 ? tr('{n} Aufnahmen, vermutlich dieselbe Person', {n: g.faces.length}) + ' · ' : '') +
+        tr('zuletzt {when} · Antippen zeigt das ganze Bild', {when: when(first.created)})}),
       el('div', {className:'row'}, sug, name, go, ign)));
   }
 }
@@ -143,10 +149,10 @@ async function loadPersons() {
   persons = await api('/api/persons');
   $('names').replaceChildren(...persons.map(p => el('option', {value:p.name})));
   const box = $('persons'); box.replaceChildren();
-  if (!persons.length) { box.append(el('div', {className:'empty', textContent:'Noch keine Personen. Gesichter unter „Offen“ zuweisen oder oben eine Person anlegen.'})); return; }
+  if (!persons.length) { box.append(el('div', {className:'empty', textContent:tr('Noch keine Personen. Gesichter unter „Offen“ zuweisen oder oben eine Person anlegen.')})); return; }
   for (const p of persons) {
     const file = el('input', {type:'file', accept:'image/*', multiple:true, hidden:true});
-    const add = el('button', {className:'b', textContent:'Fotos hinzufügen'});
+    const add = el('button', {className:'b', textContent:tr('Fotos hinzufügen')});
     add.onclick = () => file.click();
     file.onchange = () => act(add, async () => {
       let ok = 0;
@@ -154,49 +160,49 @@ async function loadPersons() {
         const fd = new FormData(); fd.append('image', f);
         try { await api(`/api/persons/${p.id}/photo`, {method:'POST', body:fd}); ok++; } catch (e) { toast(`${f.name}: ${e.message}`, true); }
       }
-      if (ok) toast(`${ok} Foto${ok > 1 ? 's' : ''} hinzugefügt`); refresh();
+      if (ok) toast((ok > 1 ? tr('{n} Fotos hinzugefügt', {n: ok}) : tr('{n} Foto hinzugefügt', {n: ok}))); refresh();
     });
-    const ren = el('button', {className:'b', textContent:'Umbenennen'});
-    ren.onclick = () => { const n = prompt('Neuer Name (vorhandener Name = zusammenlegen):', p.name); if (n && n.trim() && n !== p.name)
-      act(ren, async () => { const r = await api(`/api/persons/${p.id}`, {method:'PATCH', json:{name:n}}); toast(r.merged ? 'Zusammengelegt' : 'Umbenannt'); refresh(); }); };
-    const del = el('button', {className:'b bad', textContent:'Löschen'});
-    del.onclick = () => confirm(`${p.name} mit allen ${p.count} Gesichtern löschen?`) &&
+    const ren = el('button', {className:'b', textContent:tr('Umbenennen')});
+    ren.onclick = () => { const n = prompt(tr('Neuer Name (vorhandener Name = zusammenlegen):'), p.name); if (n && n.trim() && n !== p.name)
+      act(ren, async () => { const r = await api(`/api/persons/${p.id}`, {method:'PATCH', json:{name:n}}); toast(r.merged ? tr('Zusammengelegt') : tr('Umbenannt')); refresh(); }); };
+    const del = el('button', {className:'b bad', textContent:tr('Löschen')});
+    del.onclick = () => confirm(tr('{name} mit allen {n} Gesichtern löschen?', {name: p.name, n: p.count})) &&
       act(del, async () => { await api(`/api/persons/${p.id}`, {method:'DELETE'}); refresh(); });
     const faces = p.samples.map(s => {
-      const i = el('img', {src:s.crop, loading:'lazy', alt:'', title:'Antippen: verschieben oder entfernen'});
+      const i = el('img', {src:s.crop, loading:'lazy', alt:'', title:tr('Antippen: verschieben oder entfernen')});
       i.onclick = () => sampleMenu(s, p);
       return i;
     });
     box.append(el('div', {className:'card'},
-      el('div', {className:'pname', textContent:p.name}, el('span', {className:'muted', textContent:` · ${p.count} Gesicht${p.count === 1 ? '' : 'er'}`})),
-      faces.length ? el('div', {className:'faces', style:'margin-top:10px'}, ...faces) : el('div', {className:'muted', textContent:'Noch keine Gesichter – Fotos hinzufügen.'}),
+      el('div', {className:'pname', textContent:p.name}, el('span', {className:'muted', textContent:' · ' + (p.count === 1 ? tr('{n} Gesicht', {n: p.count}) : tr('{n} Gesichter', {n: p.count}))})),
+      faces.length ? el('div', {className:'faces', style:'margin-top:10px'}, ...faces) : el('div', {className:'muted', textContent:tr('Noch keine Gesichter – Fotos hinzufügen.')}),
       el('div', {className:'row'}, add, ren, del, file)));
   }
 }
 async function sampleMenu(s, p) {
-  const n = prompt(`Dieses Gesicht gehört nicht zu ${p.name}?\nRichtigen Namen eintragen – oder leer lassen und OK, um es zu entfernen.`, '');
+  const n = prompt(tr('Dieses Gesicht gehört nicht zu {name}?\nRichtigen Namen eintragen – oder leer lassen und OK, um es zu entfernen.', {name: p.name}), '');
   if (n === null) return;
   try {
-    if (n.trim()) { await api(`/api/samples/${s.id}/move`, {method:'POST', json:{name:n}}); toast('Verschoben'); }
-    else { await api(`/api/samples/${s.id}`, {method:'DELETE'}); toast('Entfernt'); }
+    if (n.trim()) { await api(`/api/samples/${s.id}/move`, {method:'POST', json:{name:n}}); toast(tr('Verschoben')); }
+    else { await api(`/api/samples/${s.id}`, {method:'DELETE'}); toast(tr('Entfernt')); }
     refresh();
   } catch (e) { toast(e.message, true); }
 }
 $('new-btn').onclick = () => { const n = $('new-name').value.trim(); if (n) act($('new-btn'), async () => {
-  const r = await api('/api/persons', {method:'POST', json:{name:n}}); $('new-name').value = ''; toast(r.created ? 'Angelegt' : 'Gibt es schon'); refresh(); }); };
+  const r = await api('/api/persons', {method:'POST', json:{name:n}}); $('new-name').value = ''; toast(r.created ? tr('Angelegt') : tr('Gibt es schon')); refresh(); }); };
 
 // ---------------------------------------------------------------- Verlauf
 async function loadEvents() {
   const evs = await api('/api/events?limit=100');
   const box = $('events'); box.replaceChildren();
-  if (!evs.length) { box.append(el('div', {className:'empty', textContent:'Noch kein Klingeln.'})); return; }
+  if (!evs.length) { box.append(el('div', {className:'empty', textContent:tr('Noch kein Klingeln.')})); return; }
   for (const e of evs) {
     const r = e.result || {};
     // erkannte Gesichter: Ausschnitt + "Falsch?" (solange die Erkennung noch aufgehoben wird)
     const faces = (r.faces || []).filter(f => f.known && (f.correctable || f.corrected)).map(f => el('div', {className:'evface'},
       f.crop && f.correctable ? img(f.crop) : null,
-      el('span', {textContent: f.name + (f.corrected ? ' (korrigiert)' : '')}),
-      f.correctable ? Object.assign(el('button', {className:'b sm', textContent:'Falsch?'}), {onclick: () => correctDialog(f)}) : null));
+      el('span', {textContent: f.name + (f.corrected ? tr(' (korrigiert)') : '')}),
+      f.correctable ? Object.assign(el('button', {className:'b sm', textContent:tr('Falsch?')}), {onclick: () => correctDialog(f)}) : null));
     box.append(el('div', {className:'ev'}, el('time', {textContent:when(e.created)}),
       el('div', {style:'flex:1'}, el('span', {className: r.unknown_count ? 'unk' : 'known', textContent:e.text || '…'}),
         e.source && e.source !== 'upload' ? el('div', {className:'muted', textContent:e.source}) : null,
@@ -206,28 +212,28 @@ async function loadEvents() {
 
 function correctDialog(f) {
   const d = $('dlg'), body = $('dlg-body'); body.replaceChildren();
-  const name = el('input', {type:'text', placeholder:'Wer war es wirklich?'}); name.setAttribute('list', 'names');
-  const ok = el('button', {className:'b pri', textContent:'Richtig zuordnen'});
-  const unk = el('button', {className:'b', textContent:'Unbekannt', title:'Gesicht kommt nach „Offen“, nichts wird gelernt'});
-  const close = el('button', {className:'b', textContent:'Abbrechen', onclick: () => d.close()});
+  const name = el('input', {type:'text', placeholder:tr('Wer war es wirklich?')}); name.setAttribute('list', 'names');
+  const ok = el('button', {className:'b pri', textContent:tr('Richtig zuordnen')});
+  const unk = el('button', {className:'b', textContent:tr('Unbekannt'), title:tr('Gesicht kommt nach „Offen“, nichts wird gelernt')});
+  const close = el('button', {className:'b', textContent:tr('Abbrechen'), onclick: () => d.close()});
   const send = n => act(ok, async () => {
     const r = await api(`/api/recent/${f.recent_id}/correct`, {method:'POST', json:{name:n}});
-    toast(r.name ? `Korrigiert: ${r.name}${r.created ? ' (neu)' : ''}` : 'Als unbekannt nach „Offen“ verschoben');
+    toast(r.name ? tr('Korrigiert: {name}', {name: r.name}) + (r.created ? tr(' (neu)') : '') : tr('Als unbekannt nach „Offen“ verschoben'));
     refresh();
     if (!r.matched_sample) return d.close();
     // Verwechselt mit diesem Lernbild - war das selbst falsch zugeordnet?
-    const rm = el('button', {className:'b bad', textContent:'Dieses Bild entfernen'});
-    rm.onclick = () => act(rm, async () => { await api(`/api/samples/${r.matched_sample.id}`, {method:'DELETE'}); toast('Entfernt'); d.close(); refresh(); });
+    const rm = el('button', {className:'b bad', textContent:tr('Dieses Bild entfernen')});
+    rm.onclick = () => act(rm, async () => { await api(`/api/samples/${r.matched_sample.id}`, {method:'DELETE'}); toast(tr('Entfernt')); d.close(); refresh(); });
     body.replaceChildren(
-      el('div', {textContent:`Verwechselt wurde mit diesem Bild von ${r.matched_sample.person}:`}),
+      el('div', {textContent:tr('Verwechselt wurde mit diesem Bild von {name}:', {name: r.matched_sample.person})}),
       el('div', {className:'faces', style:'margin:10px 0'}, el('img', {src:r.matched_sample.crop, alt:''})),
-      el('div', {className:'muted', textContent:`Zeigt es gar nicht ${r.matched_sample.person}, entferne es – sonst kommt es wieder zu Verwechslungen.`}),
-      el('div', {className:'row'}, rm, el('button', {className:'b', textContent:'Passt, behalten', onclick: () => d.close()})));
+      el('div', {className:'muted', textContent:tr('Zeigt es gar nicht {name}, entferne es – sonst kommt es wieder zu Verwechslungen.', {name: r.matched_sample.person})}),
+      el('div', {className:'row'}, rm, el('button', {className:'b', textContent:tr('Passt, behalten'), onclick: () => d.close()})));
   });
   ok.onclick = () => name.value.trim() ? send(name.value) : name.focus();
   name.onkeydown = e => { if (e.key === 'Enter' && name.value.trim()) send(name.value); };
   unk.onclick = () => send('');
-  body.append(el('div', {className:'pname', textContent:`Als ${f.name} erkannt – falsch?`}),
+  body.append(el('div', {className:'pname', textContent:tr('Als {name} erkannt – falsch?', {name: f.name})}),
     el('div', {className:'faces', style:'margin:10px 0'}, f.crop ? el('img', {src:f.crop, alt:''}) : null),
     el('div', {className:'row'}, name), el('div', {className:'row'}, ok, unk, close));
   d.showModal(); name.focus();
@@ -240,7 +246,7 @@ $('test-btn').onclick = () => { const f = $('test-file').files[0]; if (!f) retur
     const r = await api('/api/recognize', {method:'POST', body:fd});
     $('test-res').replaceChildren(el('div', {className:'pname', textContent:r.text}),
       el('div', {className:'muted', textContent:r.faces.map(x => x.known ? `${x.name} ${Math.round(x.score * 100)} %`
-        : `unbekannt${x.suggestion ? ' (ähnlich ' + x.suggestion + ' ' + Math.round(x.score * 100) + ' %)' : ''}`).join(' · ') || 'kein Gesicht gefunden'}));
+        : tr('unbekannt') + (x.suggestion ? ' ' + tr('(ähnlich {name} {p} %)', {name: x.suggestion, p: Math.round(x.score * 100)}) : '')).join(' · ') || tr('kein Gesicht gefunden')}));
     refresh();
   }); };
 
