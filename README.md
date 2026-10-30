@@ -116,4 +116,4 @@ you need a license from InsightFace or other models. Overview: [THIRD_PARTY_NOTI
 ## Support
 
 If the project helps you, I'm happy about feedback, bug reports and pull requests – see [CONTRIBUTING.md](CONTRIBUTING.md).
-A donation link will follow. <!-- SPENDEN_LINK -->
+You can also [buy me a coffee](https://buymeacoffee.com/poldion).

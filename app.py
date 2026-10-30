@@ -32,7 +32,7 @@ import i18n
 
 import tracker
 
-__version__ = "0.2.0"          # SemVer; einzige Stelle (Oberflaeche, /api/settings, /proxy-module)
+__version__ = "0.2.1"          # SemVer; einzige Stelle (Oberflaeche, /api/settings, /proxy-module)
 
 DATA = os.environ.get("FACEREC_DATA", "./data")
 MODELS = os.environ.get("FACEREC_MODELS", "./models")
