@@ -3,6 +3,24 @@
 All notable changes to this project are documented in this file. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] – 2026-11-02
+
+### Added
+
+- History filter by camera (`GET /api/events?source=…`, `GET /api/events/sources`)
+- Stream scans run per camera; a new scan only replaces the running scan of the same camera
+- Home Assistant events `facerec_stream_person` and `facerec_stream_complete`
+
+### Changed
+
+- `FACEREC_KEEP_EVENTS` now applies per camera, so a busy camera no longer pushes the doorbell out of the history
+- `FACEREC_MATCH` default raised from 0.32 to 0.35 to reduce mix-ups; scores between 0.28 and 0.35 are now suggestions
+  (an existing env file that sets the value keeps its own)
+
+### Deprecated
+
+- Events `flur_person_erkannt` and `flur_personen_komplett`: still sent, will be removed in a later version
+
 ## [0.2.1] – 2026-10-30
 
 ### Changed

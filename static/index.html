@@ -24,6 +24,7 @@
   .faces img { width:84px; height:84px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer; background:#000; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
   input[type=text] { flex:1; min-width:140px; background:#111214; border:1px solid var(--line); color:var(--text); border-radius:9px; padding:9px 10px; font:inherit; }
+  select { width:100%; background:#111214; border:1px solid var(--line); color:var(--text); border-radius:9px; padding:9px 10px; font:inherit; }
   button.b { background:#2a2c31; border:1px solid var(--line); color:var(--text); border-radius:9px; padding:9px 12px; font:inherit; cursor:pointer; }
   button.b.pri { background:var(--acc); color:#111; border-color:var(--acc); font-weight:600; }
   button.b.bad { color:var(--bad); }
@@ -69,7 +70,10 @@
     </div></div>
     <div id="persons"></div>
   </section>
-  <section id="t-events" hidden><div class="card" id="events"></div></section>
+  <section id="t-events" hidden>
+    <div class="card"><select id="ev-source" aria-label="Kamera"></select></div>
+    <div class="card" id="events"></div>
+  </section>
   <section id="t-test" hidden>
     <div class="card">
       <div class="muted">Bild hochladen und erkennen lassen, wie beim Klingeln. Unbekannte Gesichter landen unter „Offen“.</div>
@@ -193,7 +197,12 @@ $('new-btn').onclick = () => { const n = $('new-name').value.trim(); if (n) act(
 
 // ---------------------------------------------------------------- Verlauf
 async function loadEvents() {
-  const evs = await api('/api/events?limit=100');
+  const sel = $('ev-source'), cur = sel.value;
+  const sources = await api('/api/events/sources');
+  sel.replaceChildren(el('option', {value:'', textContent:tr('Alle Kameras')}),
+    ...sources.map(s => el('option', {value:s, textContent:s === 'upload' ? tr('Test-Upload') : s})));
+  sel.value = sources.includes(cur) ? cur : '';
+  const evs = await api('/api/events?limit=100' + (sel.value ? '&source=' + encodeURIComponent(sel.value) : ''));
   const box = $('events'); box.replaceChildren();
   if (!evs.length) { box.append(el('div', {className:'empty', textContent:tr('Noch kein Klingeln.')})); return; }
   for (const e of evs) {
@@ -238,6 +247,8 @@ function correctDialog(f) {
     el('div', {className:'row'}, name), el('div', {className:'row'}, ok, unk, close));
   d.showModal(); name.focus();
 }
+
+$('ev-source').onchange = () => loadEvents().catch(e => toast(e.message, true));
 
 // ---------------------------------------------------------------- Test
 $('test-btn').onclick = () => { const f = $('test-file').files[0]; if (!f) return $('test-file').click();

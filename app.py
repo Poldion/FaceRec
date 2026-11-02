@@ -32,7 +32,7 @@ import i18n
 
 import tracker
 
-__version__ = "0.2.1"          # SemVer; einzige Stelle (Oberflaeche, /api/settings, /proxy-module)
+__version__ = "0.3.0"          # SemVer; einzige Stelle (Oberflaeche, /api/settings, /proxy-module)
 
 DATA = os.environ.get("FACEREC_DATA", "./data")
 MODELS = os.environ.get("FACEREC_MODELS", "./models")
@@ -41,7 +41,7 @@ PROVIDERS = [p.strip() for p in os.environ.get("FACEREC_PROVIDERS", "CPUExecutio
 PROVIDER_OPTIONS = json.loads(os.environ["FACEREC_PROVIDER_OPTIONS"]) if os.environ.get("FACEREC_PROVIDER_OPTIONS") else None
 DET_SIZE = int(os.environ.get("FACEREC_DET_SIZE", "640"))       # Eingangsgroesse der Gesichtssuche (480 = schneller)
 THREADS = int(os.environ.get("FACEREC_THREADS", "0"))           # CPU-Threads je Modell, 0 = automatisch
-MATCH = float(os.environ.get("FACEREC_MATCH", "0.32"))        # ab hier gilt ein Gesicht als erkannt
+MATCH = float(os.environ.get("FACEREC_MATCH", "0.35"))        # ab hier gilt ein Gesicht als erkannt
 SUGGEST = float(os.environ.get("FACEREC_SUGGEST", "0.28"))    # ab hier wird eine Person vorgeschlagen
 TOKEN = os.environ.get("FACEREC_TOKEN", "")                   # leer = ohne Anmeldung (nur im LAN!)
 HA_URL = os.environ.get("HA_URL", "").rstrip("/")
@@ -386,7 +386,9 @@ def _group_for(con, emb: np.ndarray) -> int | None:
 
 
 def _trim_events(con):
-    old = con.execute("SELECT id FROM events ORDER BY id DESC LIMIT -1 OFFSET ?", (KEEP_EVENTS,)).fetchall()
+    """Grenze je Quelle: Eine oft ausloesende Flurkamera verdraengt nicht den Verlauf der Klingel."""
+    old = [r for (s,) in con.execute("SELECT DISTINCT source FROM events").fetchall() for r in con.execute(
+        "SELECT id FROM events WHERE source IS ? ORDER BY id DESC LIMIT -1 OFFSET ?", (s, KEEP_EVENTS)).fetchall()]
     for r in old:
         if not con.execute("SELECT 1 FROM unknowns WHERE event_id = ? UNION SELECT 1 FROM recent WHERE event_id = ?",
                            (r["id"], r["id"])).fetchone():
@@ -397,7 +399,7 @@ def _trim_events(con):
 
 
 # ------------------------------------------------------------------ Stream Scanner (On-Demand Scharfschaltung)
-STREAM_SCAN_TASK = None
+STREAM_SCANS: dict[str, asyncio.Task] = {}   # laufender Stream-Scan je Kamera
 
 
 async def fire_ha_event(event_type: str, data: dict):
@@ -415,10 +417,15 @@ async def fire_ha_event(event_type: str, data: dict):
         print(f"HA-Event {event_type} fehlgeschlagen: {e}", flush=True)
 
 
+async def fire_stream_event(event_type: str, legacy_type: str, data: dict):
+    """Ereignis des Stream-Scans; der alte Name (flur_*) wird fuer bestehende Automationen weiter mitgeschickt."""
+    await fire_ha_event(event_type, data)
+    await fire_ha_event(legacy_type, data)
+
+
 @app.post("/api/stream_scan")
 async def start_stream_scan(request: Request):
     """Startet On-Demand-Streaming-Erkennung fuer <duration> Sekunden."""
-    global STREAM_SCAN_TASK
     body = {}
     if request.headers.get("content-type", "").startswith("application/json"):
         try:
@@ -429,12 +436,11 @@ async def start_stream_scan(request: Request):
     entity_id = str(body.get("entity_id") or next(iter(STREAM_URLS), ""))
     stream_url = body.get("stream_url", None)
 
-    if STREAM_SCAN_TASK and not STREAM_SCAN_TASK.done():
-        STREAM_SCAN_TASK.cancel()
-
-    STREAM_SCAN_TASK = asyncio.create_task(
-        _run_stream_scan(entity_id, stream_url, duration)
-    )
+    # Ein neuer Scan ersetzt nur den laufenden derselben Kamera
+    running = STREAM_SCANS.get(entity_id)
+    if running and not running.done():
+        running.cancel()
+    STREAM_SCANS[entity_id] = asyncio.create_task(_run_stream_scan(entity_id, stream_url, duration))
     return {"status": "started", "duration": duration, "entity_id": entity_id}
 
 
@@ -503,7 +509,7 @@ def _analyze_frame(jpeg: bytes, scene: "tracker.SceneTracker", now: float, stats
 
 
 async def _report_tracks(tracks: list, entity_id: str, batch: dict):
-    """Neu entschiedene Personen sofort melden (HA-Ereignis 'flur_person_erkannt' je Person), damit
+    """Neu entschiedene Personen sofort melden (HA-Ereignis 'facerec_stream_person' je Person), damit
     Home Assistant gleich mit Namen gruessen kann. Speichert Erkennung/Unbekannte und lernt."""
     if not tracks:
         return
@@ -550,13 +556,13 @@ async def _report_tracks(tracks: list, entity_id: str, batch: dict):
     for item in items:
         name = item.get("name") or item.get("suggestion")
         print(f"Stream-Scan sofort gemeldet: {name or 'unbekannt'}", flush=True)
-        await fire_ha_event("flur_person_erkannt", {
+        await fire_stream_event("facerec_stream_person", "flur_person_erkannt", {
             "names": [name] if name else [], "unknown": not name, "unknown_count": 0 if name else 1,
             "faces": [item], "source": entity_id, "event_id": batch["event_id"], "single": True})
 
 
 async def _finish_batch(entity_id: str, batch: dict):
-    """Sammelfenster abschliessen: Ereignis fertig speichern und 'flur_personen_komplett' mit allen senden
+    """Sammelfenster abschliessen: Ereignis fertig speichern und 'facerec_stream_complete' mit allen senden
     (Home Assistant spricht dann einen gemeinsamen Kommentar)."""
     if batch.get("event_id") is None:
         return
@@ -573,8 +579,9 @@ async def _finish_batch(entity_id: str, batch: dict):
             _trim_events(con)
     batch.clear()
     print(f"Stream-Scan Sammelfenster abgeschlossen: {names} unbekannt={unknown}", flush=True)
-    await fire_ha_event("flur_personen_komplett", {"names": names, "unknown": unknown > 0, "unknown_count": unknown,
-                                                   "faces": faces, "source": entity_id, "event_id": ev})
+    await fire_stream_event("facerec_stream_complete", "flur_personen_komplett", {
+        "names": names, "unknown": unknown > 0, "unknown_count": unknown,
+        "faces": faces, "source": entity_id, "event_id": ev})
 
 
 # Lernen aus der Flurkamera: Die Lernbilder stammen meist von der Klingel (andere Kamera, anderer Winkel).
@@ -942,10 +949,11 @@ async def create_person(request: Request):
 
 # ------------------------------------------------------------------ Verlauf
 @app.get("/api/events")
-async def events(limit: int = 50):
+async def events(limit: int = 50, source: str | None = None):
     with closing(db()) as con:
-        rows = con.execute("SELECT id, created, source, text, result FROM events ORDER BY id DESC LIMIT ?",
-                           (max(1, min(limit, 500)),)).fetchall()
+        where, args = ("WHERE source = ? ", (source,)) if source else ("", ())
+        rows = con.execute(f"SELECT id, created, source, text, result FROM events {where}ORDER BY id DESC LIMIT ?",
+                           (*args, max(1, min(limit, 500)))).fetchall()
         open_ids = {r["id"] for r in con.execute("SELECT id FROM recent")}
     out = []
     for r in rows:
@@ -954,6 +962,13 @@ async def events(limit: int = 50):
             f["correctable"] = f.get("recent_id") in open_ids
         out.append({"id": r["id"], "created": r["created"], "source": r["source"], "text": r["text"], "result": res})
     return out
+
+
+@app.get("/api/events/sources")
+async def event_sources():
+    with closing(db()) as con:
+        return [r["source"] for r in con.execute(
+            "SELECT DISTINCT source FROM events WHERE source IS NOT NULL ORDER BY source").fetchall()]
 
 
 @app.get("/api/settings")

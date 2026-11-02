@@ -49,7 +49,8 @@ to `/config/packages/` and replace `FACEREC_HOST` in it. The automations in
 |---|---|---|
 | `HA_URL` / `HA_TOKEN` | – | Home Assistant and a long-lived token to fetch the images |
 | `FACEREC_TOKEN` | – | Optional key for API and UI |
-| `FACEREC_MATCH` / `FACEREC_SUGGEST` | `0.32` / `0.28` | Thresholds for "recognized" and "suggestion" |
+| `FACEREC_MATCH` / `FACEREC_SUGGEST` | `0.35` / `0.28` | Thresholds for "recognized" and "suggestion" |
+| `FACEREC_KEEP_EVENTS` | `300` | History entries kept per camera |
 | `FACEREC_RECENT_HOURS` | `48` | How long recognized faces are kept for corrections |
 | `FACEREC_LANG` | `de` | Language of the announcement and push sentence (`de` or `en`); the UI has its own switch |
 | `FACEREC_PROVIDERS` | `CPUExecutionProvider` | ONNX execution provider (GPU/NPU) |

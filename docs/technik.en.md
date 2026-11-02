@@ -26,7 +26,7 @@ and `w600k_r50` (ArcFace, 512-dimensional face embedding). Without the insightfa
 (`engine.py`). License of the models: non-commercial only.
 
 Measured on a Ryzen AI Max+ 395 (CPU): ~90 ms per image. With generated test images: same person 0.83–0.92 similarity
-(also 640×360 JPEG with a 92 px face), different people 0.23–0.31. Thresholds: recognised from `FACEREC_MATCH` 0.32,
+(also 640×360 JPEG with a 92 px face), different people 0.23–0.31. Thresholds: recognised from `FACEREC_MATCH` 0.35,
 suggestion from `FACEREC_SUGGEST` 0.28. Real doorbell images (night/IR, at an angle) are often worse – assigning several
 shots per person helps most. Learning: confident recognitions (≥ `FACEREC_LEARN_MIN`, 0.45, in at least two images) are
 taken over as additional training images.
@@ -47,7 +47,9 @@ device entry in `docker-compose.yml`.
 Home Assistant starts e.g. `{"entity_id": "camera.flur", "duration": 45}` when the front door opens. The service reads
 the MJPEG stream – directly from the camera if `FACEREC_STREAM_URLS` has an address for the entity (e.g. ESP32-CAM),
 otherwise via Home Assistant (`/api/camera_proxy_stream`) – and reports recognised people as the HA event
-`flur_person_erkannt` (`names`, `unknown`, `unknown_count`, `faces`, `event_id`), and `flur_personen_komplett` at the end.
+`facerec_stream_person` (`names`, `unknown`, `unknown_count`, `faces`, `source`, `event_id`), and `facerec_stream_complete` at the end.
+The old names `flur_person_erkannt` and `flur_personen_komplett` are still sent as well for now. Each camera runs its own
+scan; a new one only replaces the running scan of the same camera.
 
 `tracker.py`:
 - **Tracking instead of single images:** every face gets a track by its position in the image. Decisions are made per

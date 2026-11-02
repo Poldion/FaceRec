@@ -218,6 +218,8 @@ def test_stream_scan_two_people_and_guest(app_env, monkeypatch):
     asyncio.run(appmod._run_stream_scan("camera.test", "http://x/", 10))
     singles = [d for t, d in events if t == "flur_person_erkannt"]
     finals = [d for t, d in events if t == "flur_personen_komplett"]
+    assert [d for t, d in events if t == "facerec_stream_person"] == singles
+    assert [d for t, d in events if t == "facerec_stream_complete"] == finals
     # sofort je Person eine Meldung (fuer den schnellen Gruss), danach eine Abschlussmeldung fuer alle
     assert sorted(tuple(d["names"]) for d in singles) == [(), ("Anton",), ("Max",)]
     assert all(d["single"] and len(d["faces"]) == 1 for d in singles)

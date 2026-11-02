@@ -48,7 +48,8 @@ nach `/config/packages/` kopieren und `FACEREC_HOST` darin ersetzen. Die Automat
 |---|---|---|
 | `HA_URL` / `HA_TOKEN` | – | Home Assistant und ein Long-Lived Token zum Abholen der Bilder |
 | `FACEREC_TOKEN` | – | Optionaler Schlüssel für API und Oberfläche |
-| `FACEREC_MATCH` / `FACEREC_SUGGEST` | `0.32` / `0.28` | Schwellen für „erkannt“ und „Vorschlag“ |
+| `FACEREC_MATCH` / `FACEREC_SUGGEST` | `0.35` / `0.28` | Schwellen für „erkannt“ und „Vorschlag“ |
+| `FACEREC_KEEP_EVENTS` | `300` | So viele Verlaufseinträge bleiben je Kamera |
 | `FACEREC_RECENT_HOURS` | `48` | So lange bleiben erkannte Gesichter zum Korrigieren |
 | `FACEREC_LANG` | `de` | Sprache des Ansage- und Push-Satzes (`de` oder `en`); die Oberfläche hat einen eigenen Umschalter |
 | `FACEREC_PROVIDERS` | `CPUExecutionProvider` | ONNX-Rechenwerk (GPU/NPU) |

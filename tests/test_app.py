@@ -311,6 +311,52 @@ def test_all_texts_translated():
     assert out.returncode == 0, out.stderr
 
 
+def test_event_trim_per_source_and_filter(env, monkeypatch):
+    c, appmod, _ = env
+    monkeypatch.setattr(appmod, "KEEP_EVENTS", 2)
+    with appmod.closing(appmod.db()) as con, con:
+        door = con.execute("INSERT INTO events (created, source) VALUES (1, 'image.klingel')").lastrowid
+        for i in range(5):
+            con.execute("INSERT INTO events (created, source) VALUES (?, 'camera.flur')", (i + 2,))
+        appmod._trim_events(con)
+    assert [e["id"] for e in c.get("/api/events?source=image.klingel").json()] == [door]
+    assert len(c.get("/api/events?source=camera.flur").json()) == 2
+    assert c.get("/api/events/sources").json() == ["camera.flur", "image.klingel"]
+
+
+def test_stream_scan_per_camera(env, monkeypatch):
+    c, appmod, _ = env
+    started, stopped = [], []
+
+    async def fake_scan(entity_id, url, duration):
+        started.append(entity_id)
+        try:
+            await appmod.asyncio.sleep(60)
+        except appmod.asyncio.CancelledError:
+            stopped.append(entity_id)
+            raise
+    monkeypatch.setattr(appmod, "_run_stream_scan", fake_scan)
+
+    class Req:
+        def __init__(self, e):
+            self.headers, self.e = {"content-type": "application/json"}, e
+
+        async def json(self):
+            return {"entity_id": self.e}
+
+    async def run():
+        for e in ("camera.a", "camera.b"):
+            await appmod.start_stream_scan(Req(e))
+        await appmod.asyncio.sleep(0)
+        assert stopped == []                                    # andere Kamera laeuft weiter
+        await appmod.start_stream_scan(Req("camera.a"))
+        await appmod.asyncio.sleep(0)
+        assert stopped == ["camera.a"] and started == ["camera.a", "camera.b", "camera.a"]
+        for t in appmod.STREAM_SCANS.values():
+            t.cancel()
+    appmod.asyncio.run(run())
+
+
 # ------------------------------------------------------------------ Falsch erkannt
 
 def _learn(c, person, name, variant=1):

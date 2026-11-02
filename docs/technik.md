@@ -26,7 +26,7 @@ Merkmalspunkte) und `w600k_r50` (ArcFace, 512er Gesichtsabdruck). Ohne das insig
 
 Gemessen auf einem Ryzen AI Max+ 395 (CPU): ~90 ms pro Bild. Mit erzeugten Testbildern: gleiche Person 0,83–0,92
 Ähnlichkeit (auch 640×360-JPEG mit 92-px-Gesicht), verschiedene Personen 0,23–0,31. Schwellen: erkannt ab
-`FACEREC_MATCH` 0,32, Vorschlag ab `FACEREC_SUGGEST` 0,28. Echte Klingelbilder (Nacht/IR, schräg) sind oft schlechter –
+`FACEREC_MATCH` 0,35, Vorschlag ab `FACEREC_SUGGEST` 0,28. Echte Klingelbilder (Nacht/IR, schräg) sind oft schlechter –
 mehrere Aufnahmen pro Person zuweisen hilft am meisten. Lernen: Sichere Erkennungen (≥ `FACEREC_LEARN_MIN`, 0,45, in
 mindestens zwei Bildern) werden als zusätzliche Lernbilder übernommen.
 
@@ -46,7 +46,9 @@ und einen auskommentierten Geräte-Eintrag in `docker-compose.yml`.
 Home Assistant startet z. B. beim Öffnen der Haustür `{"entity_id": "camera.flur", "duration": 45}`. Der Dienst liest
 den MJPEG-Stream – direkt von der Kamera, wenn `FACEREC_STREAM_URLS` eine Adresse für die Entität hat (z. B. ESP32-CAM),
 sonst über Home Assistant (`/api/camera_proxy_stream`) – und meldet erkannte Personen als HA-Ereignis
-`flur_person_erkannt` (`names`, `unknown`, `unknown_count`, `faces`, `event_id`), am Ende `flur_personen_komplett`.
+`facerec_stream_person` (`names`, `unknown`, `unknown_count`, `faces`, `source`, `event_id`), am Ende `facerec_stream_complete`.
+Die alten Namen `flur_person_erkannt` und `flur_personen_komplett` werden vorerst zusätzlich gesendet. Je Kamera läuft ein
+eigener Scan, ein neuer ersetzt nur den laufenden derselben Kamera.
 
 `tracker.py`:
 - **Verfolgung statt Einzelbild:** Jedes Gesicht bekommt eine Spur über die Bildposition. Entschieden wird pro Spur:
